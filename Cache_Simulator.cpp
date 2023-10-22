@@ -55,7 +55,6 @@ class LRUCache : public Cache
     void accessMemory(int address) override//overrides base class
     {
         auto it = find(cache.begin(), cache.end(), address);//search address in cache
-
         if (it != cache.end())//if addres found then it will not reach cache end
         {
             cout << "LRU Cache hit!" << endl;
