@@ -1,155 +1,240 @@
 #include <iostream>
-#include <string>
 #include <vector>
-#include <map>
-
+#include <queue>
+#include <algorithm>
+#include <unordered_map>
 using namespace std;
 
-class MorseSource {
-protected:
-    string morseCode;
-    string englishText;
+const int CACHE_SIZE = 16; 
+const int MEMORY_SIZE = 32;
 
-public:
-    MorseSource(const string& code = "") : morseCode(code), englishText("") {}
-
-    void translate() {
-        // Implement the translation in derived classes
+class Cache
+{
+    protected:
+    vector<int> cache;
+    vector<int> memory;
+    public:
+    Cache(int size)//constructor
+    {
+        cache.resize(size, -1);
+        for (int i = 0; i < MEMORY_SIZE; i++)
+        {
+            memory.push_back(i);
+        }
     }
 
-    void displayTranslation() const {
-        cout << "Input Text: " << morseCode << endl;
-        cout << "Translation: " << englishText << endl;
+    virtual ~Cache(){} //virtual destructor
+
+    virtual void accessMemory(int address) = 0; //pure virtual function
+
+    void displayCache()//display the cache
+    {
+        cout << "Current Cache: ";
+        for (int i = 0; i < CACHE_SIZE; i++)
+        {
+            if (cache[i] == -1)
+            {
+                cout << "empty ";
+            } 
+            else
+            {
+                cout << cache[i] << " ";
+            }
+        }
+        cout << endl;
     }
 };
 
-class TextualMorseSource : public MorseSource {
-private:
-    map<string, char> morseToEnglish;
-    map<char, string> englishToMorse;
+class LRUCache : public Cache
+{
+    private:
+    vector<int> cacheOrder;
+    public:
+    LRUCache(int size) : Cache(size) {}//calling base class constructor
 
-public:
-    TextualMorseSource(const string& code = "") : MorseSource(code) {
-        // Initialize Morse to English and English to Morse mappings
-        morseToEnglish = {
-            {".-", 'A'}, {"-...", 'B'}, {"-.-.", 'C'}, {"-..", 'D'}, {".", 'E'},
-            {"..-.", 'F'}, {"--.", 'G'}, {"....", 'H'}, {"..", 'I'}, {".---", 'J'},
-            {"-.-", 'K'}, {".-..", 'L'}, {"--", 'M'}, {"-.", 'N'}, {"---", 'O'},
-            {".--.", 'P'}, {"--.-", 'Q'}, {".-.", 'R'}, {"...", 'S'}, {"-", 'T'},
-            {"..-", 'U'}, {"...-", 'V'}, {".--", 'W'}, {"-..-", 'X'}, {"-.--", 'Y'},
-            {"--..", 'Z'}, {"/", ' '} // Space
-        };
+    void accessMemory(int address) override//overrides base class
+    {
+        auto it = find(cache.begin(), cache.end(), address);//search address in cache
 
-        // Initialize English to Morse mapping (reverse)
-        for (const auto& pair : morseToEnglish) {
-            englishToMorse[pair.second] = pair.first;
+        if (it != cache.end())//if addres found then it will not reach cache end
+        {
+            cout << "LRU Cache hit!" << endl;
+            cacheOrder.erase(remove(cacheOrder.begin(), cacheOrder.end(), address), cacheOrder.end());
+            cacheOrder.push_back(address);//keeping the order of cache updated
         }
-    }
-
-    // Overload the translate function for Morse to English
-    void translate(bool morseToEng) {
-        if (morseToEng) {
-            morseToEnglishTranslate();
-        } else {
-            englishToMorseTranslate();
-        }
-    }
-
-private:
-    void morseToEnglishTranslate() {
-        string currentSymbol;
-        englishText = "";
-
-        for (size_t i = 0; i < morseCode.length(); ++i) {
-            if (morseCode[i] == ' ' || morseCode[i] == '/') {
-                if (!currentSymbol.empty()) {
-                    char englishChar = '?'; // Default for unrecognized Morse symbol
-                    auto it = morseToEnglish.find(currentSymbol);
-                    if (it != morseToEnglish.end()) {
-                        englishChar = it->second;
+        else
+        {
+            if (cacheOrder.size() == CACHE_SIZE)//address not found
+            {
+                int removedAddress = cacheOrder.front();//cache is full,apply LRU
+                cacheOrder.erase(cacheOrder.begin());
+                auto index = find(cache.begin(), cache.end(), removedAddress);
+                *index = address;
+                cacheOrder.push_back(address);
+            }
+            else
+            {
+                cacheOrder.push_back(address);//cache not full,add simply
+                auto emptySlot=find(cache.begin(), cache.end(), -1);//insert add at first empty slot
+                *emptySlot = address;
+                if (address > 0)//principle of locality
+                {
+                    int prevAddress = address - 1;
+                    auto prevSlot = find(cache.begin(), cache.end(), prevAddress);
+                    if (prevSlot == cache.end())
+                    {
+                        cacheOrder.push_back(prevAddress);//address not in cache,add it
+                        auto emptySlot = find(cache.begin(), cache.end(), -1);
+                        *emptySlot = prevAddress;
                     }
-                    englishText += englishChar;
-                    currentSymbol = "";
                 }
-                if (morseCode[i] == '/') {
-                    englishText += ' '; // Word boundary
-                }
-            } else {
-                currentSymbol += morseCode[i];
-            }
-        }
-
-        // Process the last Morse symbol
-        if (!currentSymbol.empty()) {
-            char englishChar = '?'; // Default for unrecognized Morse symbol
-            auto it = morseToEnglish.find(currentSymbol);
-            if (it != morseToEnglish.end()) {
-                englishChar = it->second;
-            }
-            englishText += englishChar;
-        }
-    }
-
-    void englishToMorseTranslate() {
-        string uppercaseText;
-        for (char c : morseCode) {
-            if (isalpha(c)) {
-                uppercaseText += toupper(c);
-            } else if (c == ' ') {
-                uppercaseText += '/';
-            }
-        }
-
-        string morseText;
-        for (char c : uppercaseText) {
-            if (c == ' ') {
-                morseText += ' ';
-            } else {
-                auto it = englishToMorse.find(c);
-                if (it != englishToMorse.end()) {
-                    morseText += it->second + ' ';
+                if (address < MEMORY_SIZE - 1)
+                {
+                    int nextAddress = address + 1;
+                    auto nextSlot = find(cache.begin(), cache.end(), nextAddress);
+                    if (nextSlot == cache.end())
+                    {
+                        cacheOrder.push_back(nextAddress);//address not in cache,add it
+                        auto emptySlot = find(cache.begin(), cache.end(), -1);
+                        *emptySlot = nextAddress;
+                    }
                 }
             }
+            cout << "LRU Cache miss - Address " << address << " added to the cache." << endl;
         }
-
-        englishText = morseText;
     }
 };
 
-int main() {
-    while (true) {
-        cout << "Morse to English Translator Menu:\n";
-        cout << "1. Translate Morse to English\n";
-        cout << "2. Translate English to Morse\n";
-        cout << "3. Exit\n";
-        cout << "Enter your choice: ";
+class LFUCache : public Cache
+{
+    private:
+    unordered_map<int, int> frequency;
+    public:
+    LFUCache(int size) : Cache(size) {}//calling base class constructor
 
-        int choice;
-        cin >> choice;
-        cin.ignore(); // Consume newline character
-
-        if (choice == 1) {
-            string morseInput;
-            cout << "Enter Morse code: ";
-            getline(cin, morseInput);
-
-            TextualMorseSource textualSource(morseInput);
-            textualSource.translate(true); // Translate Morse to English
-            textualSource.displayTranslation();
-        } else if (choice == 2) {
-            string englishInput;
-            cout << "Enter English text: ";
-            getline(cin, englishInput);
-
-            TextualMorseSource textualSource(englishInput);
-            textualSource.translate(false); // Translate English to Morse
-            textualSource.displayTranslation();
-        } else if (choice == 3) {
-            break; // Exit the program
-        } else {
-            cout << "Invalid choice. Please enter 1, 2, or 3.\n";
+    void accessMemory(int address) override
+    {
+        auto it = find(cache.begin(), cache.end(), address);
+        if (it != cache.end())
+        {
+            cout << "LFU Cache hit!" << endl;//address found in the cache
+            frequency[address]++;
+        }
+        else
+        {
+            if (cache.size() == CACHE_SIZE)//address not in the cache
+            {
+                int minFreqAddress = cache.front(); //cache is full,apply LFU replacement
+                for (int val : cache)
+                {
+                    if (frequency[val] < frequency[minFreqAddress])
+                    {
+                        minFreqAddress = val;
+                    }
+                }
+                auto index = find(cache.begin(), cache.end(), minFreqAddress);
+                *index = address;
+                frequency[address] = 1;
+            }
+            else
+            {
+                cache.push_back(address);//cache is not full,simply add the address
+                frequency[address] = 1;
+                if (address > 0)//add nearby addresses according to locality
+                {
+                    int prevAddress = address - 1;
+                    auto prevSlot = find(cache.begin(), cache.end(), prevAddress);
+                    if (prevSlot == cache.end())
+                    {
+                        cache.push_back(prevAddress);//address not in cache, add it
+                        frequency[prevAddress] = 1;
+                    }
+                }
+                if (address < MEMORY_SIZE - 1)
+                {
+                    int nextAddress = address + 1;
+                    auto nextSlot = find(cache.begin(), cache.end(), nextAddress);
+                    if (nextSlot == cache.end())
+                    {
+                        cache.push_back(nextAddress);//address not in cache, add it
+                        frequency[nextAddress] = 1;
+                    }
+                }
+            }
+            cout << "LFU Cache miss - Address " << address << " added to the cache." << endl;
         }
     }
+};
 
+int main()
+{
+    Cache* cachePolicy = nullptr;//nitialize a pointer to Cache, initially set to nullptr
+    cout << "Cache size: " << CACHE_SIZE << endl;
+    while (true)
+    {
+        cout << "Options:\n1. Access Memory Address\n2. Display Cache\n3. Change Cache Replacement Policy\n4. Exit\n";
+        int choice;
+        cout << "Enter your choice: ";
+        cin >> choice;
+        if (choice == 1)
+        {
+            int address;
+            cout << "Enter a memory address to access (0-" << MEMORY_SIZE - 1 << "): ";
+            cin >> address;
+            if (address < 0 || address >= MEMORY_SIZE)
+            {
+                cout << "Invalid memory address." << endl;
+                continue;
+            }
+            if (cachePolicy)
+                cachePolicy->accessMemory(address);//access memory based on the selected policy
+            else
+                cout << "Cache is not initialized. Please select a replacement policy." << endl;
+        }
+        else if (choice == 2)
+        {
+            if (cachePolicy)
+                cachePolicy->displayCache();//display the current cache
+            else
+                cout << "Cache is not initialized. Please select a replacement policy." << endl;
+        }
+        else if (choice == 3)
+        {
+            if (cachePolicy)
+            {
+                delete cachePolicy;//clean up the previous cache to avoid memory leaks
+            }
+            int replacementChoice;
+            cout << "Select Cache Replacement Policy:\n1. LRU\n2. LFU\nEnter your choice: ";
+            cin >> replacementChoice;
+            if (replacementChoice == 1)
+            {
+                cachePolicy = new LRUCache(CACHE_SIZE);//create an LRU cache
+                cout << "LRU Cache selected." << endl;
+            }
+            else if (replacementChoice == 2)
+            {
+                cachePolicy = new LFUCache(CACHE_SIZE);//create an LFU cache
+                cout << "LFU Cache selected." << endl;
+            }
+            else
+            {
+                cout << "Invalid replacement policy choice. Using default LRU Cache." << endl;
+                cachePolicy = new LRUCache(CACHE_SIZE);//use LRU as the default cache policy
+            }
+        }
+        else if (choice == 4)
+        {
+            if (cachePolicy)
+            {
+                delete cachePolicy;//clean up dynamic memory to prevent memory leaks
+            }
+            break;//exit the program
+        }
+        else
+        {
+            cout << "Invalid choice. Please try again." << endl;
+        }
+    }
     return 0;
 }
